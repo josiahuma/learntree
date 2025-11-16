@@ -1,84 +1,64 @@
-{{-- resources/views/quizzes/take-paginated.blade.php --}}
+@php use Illuminate\Support\Facades\Session; @endphp
 
 <x-app-layout>
     <x-slot name="header">
         <h2 class="text-xl font-bold">
-            {{ $lesson->title }} —
-            Question {{ $questionIndex + 1 }}
-            @if($lesson->quiz && $lesson->quiz->questions)
-                of {{ $lesson->quiz->questions->count() }}
-            @endif
+            {{ $lesson->title }} — Question {{ $questionIndex + 1 }} of {{ $questions->count() }}
         </h2>
     </x-slot>
 
     <div class="py-6">
-        <div class="max-w-7xl mx-auto px-4">
+        <div class="max-w-4xl mx-auto px-4">
             <form method="POST"
-                  action="{{ route('lessons.quiz.paginated.store', ['lesson' => $lesson->id]) }}">
+                  action="{{ route('lessons.quiz.paginated.store', $lesson->id) }}">
                 @csrf
 
                 <div class="bg-white shadow border rounded p-6">
-                    {{-- Question text --}}
+                    {{-- Question --}}
                     <h3 class="font-semibold text-lg mb-4">
                         {{ $question->question }}
                     </h3>
 
-                    @php
-                        // Restore previously selected answers from session (if your controller saves them as 'quiz_answers')
-                        $storedAnswers  = session('quiz_answers', []);
-                        $selectedOption = $storedAnswers[$question->id] ?? null;
-                    @endphp
+                    <p class="text-xs text-gray-500 mb-2">
+                        Tick all answers that apply.
+                    </p>
 
-                    {{-- Answer options --}}
                     @foreach ($question->answers as $answer)
                         <div class="mb-3">
-                            <label class="flex items-center gap-2 cursor-pointer">
+                            <label class="flex items-center gap-2">
                                 <input
-                                    type="radio"
-                                    name="selected_option"
+                                    type="checkbox"
+                                    name="selected_options[]"
                                     value="{{ $answer->id }}"
-                                    class="h-4 w-4 text-indigo-600"
-                                    {{ $selectedOption == $answer->id ? 'checked' : '' }}
-                                    required
+                                    {{ in_array($answer->id, $selectedIds ?? []) ? 'checked' : '' }}
                                 >
                                 <span>{{ $answer->answer_text }}</span>
                             </label>
                         </div>
                     @endforeach
 
-                    {{-- Hidden fields --}}
                     <input type="hidden" name="question_id" value="{{ $question->id }}">
                     <input type="hidden" name="current_question" value="{{ $questionIndex }}">
                 </div>
 
-                {{-- Navigation buttons --}}
                 <div class="mt-6 flex justify-between">
-                    {{-- Back button --}}
                     @if ($questionIndex > 0)
-                        <a href="{{ route('lessons.quiz.paginated', [
-                                'lesson'   => $lesson->id,
-                                'question' => $questionIndex - 1,
-                            ]) }}"
-                           class="bg-gray-300 hover:bg-gray-400 text-gray-900 px-5 py-2 rounded shadow">
+                        <a href="{{ route('lessons.quiz.paginated', ['lesson' => $lesson->id, 'question' => $questionIndex - 1]) }}"
+                           class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-5 py-2 rounded">
                             ← Back
                         </a>
                     @else
                         <div></div>
                     @endif
 
-                    {{-- Next / Submit button --}}
-                    @php
-                        $totalQuestions = $lesson->quiz?->questions?->count() ?? 0;
-                    @endphp
-
-                    @if ($questionIndex + 1 === $totalQuestions)
+                    @if ($questionIndex + 1 === $questions->count())
                         <button type="submit"
-                                class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded shadow">
+                                class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded">
                             ✅ Submit Quiz
                         </button>
                     @else
                         <button type="submit"
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded shadow">
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded">
                             ➡️ Next Question
                         </button>
                     @endif

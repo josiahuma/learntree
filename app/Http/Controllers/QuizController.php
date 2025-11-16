@@ -18,11 +18,64 @@ class QuizController extends Controller
      */
     public function create(Lesson $lesson)
     {
-        $quiz = $lesson->quiz;
-
-        // If a quiz already exists you *could* redirect to edit,
-        // but we’ll just allow creating (which will overwrite in store()).
         return view('quizzes.create', compact('lesson'));
+    }
+
+    /**
+     * Normalise questions/answers from the request:
+     * - keep only non-empty answers
+     * - ensure at least 2 answers
+     * - ensure at least 1 correct answer
+     */
+    protected function normaliseQuestions(array $questionsRaw)
+    {
+        $normalised = [];
+
+        foreach ($questionsRaw as $qIndex => $questionData) {
+            $questionText = trim($questionData['question'] ?? '');
+            $answersRaw   = $questionData['answers'] ?? [];
+
+            $answers = [];
+            $hasCorrect = false;
+
+            foreach ($answersRaw as $aIndex => $answerData) {
+                $text = trim($answerData['answer_text'] ?? '');
+
+                if ($text === '') {
+                    continue; // ignore blank options
+                }
+
+                $isCorrect = !empty($answerData['is_correct']);
+
+                if ($isCorrect) {
+                    $hasCorrect = true;
+                }
+
+                $answers[] = [
+                    'answer_text' => $text,
+                    'is_correct'  => $isCorrect,
+                ];
+            }
+
+            if (count($answers) < 2) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "questions.$qIndex" => "Question " . ($qIndex + 1) . " must have at least 2 answer options.",
+                ]);
+            }
+
+            if (!$hasCorrect) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "questions.$qIndex" => "Question " . ($qIndex + 1) . " must have at least one correct answer.",
+                ]);
+            }
+
+            $normalised[] = [
+                'question' => $questionText,
+                'answers'  => $answers,
+            ];
+        }
+
+        return $normalised;
     }
 
     /**
@@ -33,12 +86,15 @@ class QuizController extends Controller
         $data = $request->validate([
             'questions'                         => 'required|array|min:1',
             'questions.*.question'              => 'required|string',
-            'questions.*.correct_answer'        => 'required|integer|min:0|max:3',
-            'questions.*.answers'               => 'required|array|size:4',
-            'questions.*.answers.*.answer_text' => 'required|string',
+            'questions.*.answers'               => 'required|array|min:1',
+            'questions.*.answers.*.answer_text' => 'nullable|string',
+            'questions.*.answers.*.is_correct'  => 'nullable|boolean',
         ]);
 
-        DB::transaction(function () use ($data, $lesson) {
+        // Clean & validate per question (2–4 answers, at least 1 correct)
+        $questions = $this->normaliseQuestions($data['questions']);
+
+        DB::transaction(function () use ($questions, $lesson) {
             $quiz = Quiz::firstOrCreate([
                 'lesson_id' => $lesson->id,
             ]);
@@ -49,17 +105,18 @@ class QuizController extends Controller
                 $question->delete();
             });
 
-            foreach ($data['questions'] as $questionData) {
+            // Rebuild from normalised data
+            foreach ($questions as $qData) {
                 $question = QuizQuestion::create([
                     'quiz_id'  => $quiz->id,
-                    'question' => $questionData['question'],
+                    'question' => $qData['question'],
                 ]);
 
-                foreach ($questionData['answers'] as $index => $answerData) {
+                foreach ($qData['answers'] as $answerData) {
                     QuizAnswer::create([
                         'quiz_question_id' => $question->id,
                         'answer_text'      => $answerData['answer_text'],
-                        'is_correct'       => ($index == $questionData['correct_answer']),
+                        'is_correct'       => $answerData['is_correct'],
                     ]);
                 }
             }
@@ -76,8 +133,6 @@ class QuizController extends Controller
     public function edit(Quiz $quiz)
     {
         $lesson = $quiz->lesson;
-
-        // Eager load questions + answers
         $quiz->load(['questions.answers']);
 
         return view('quizzes.edit', compact('quiz', 'lesson'));
@@ -85,41 +140,37 @@ class QuizController extends Controller
 
     /**
      * Update existing quiz (questions + answers).
-     *
-     * Even though we "recreate" internally, the form is pre-filled so
-     * instructors only change what they want.
      */
     public function update(Request $request, Quiz $quiz)
     {
         $data = $request->validate([
             'questions'                         => 'required|array|min:1',
             'questions.*.question'              => 'required|string',
-            'questions.*.correct_answer'        => 'required|integer|min:0|max:3',
-            'questions.*.answers'               => 'required|array|size:4',
-            'questions.*.answers.*.answer_text' => 'required|string',
+            'questions.*.answers'               => 'required|array|min:1',
+            'questions.*.answers.*.answer_text' => 'nullable|string',
+            'questions.*.answers.*.is_correct'  => 'nullable|boolean',
         ]);
 
-        $lesson = $quiz->lesson;
+        $questions = $this->normaliseQuestions($data['questions']);
+        $lesson    = $quiz->lesson;
 
-        DB::transaction(function () use ($data, $quiz) {
-            // Remove existing questions/answers
+        DB::transaction(function () use ($questions, $quiz) {
             $quiz->questions()->each(function (QuizQuestion $question) {
                 $question->answers()->delete();
                 $question->delete();
             });
 
-            // Rebuild from submitted data
-            foreach ($data['questions'] as $questionData) {
+            foreach ($questions as $qData) {
                 $question = QuizQuestion::create([
                     'quiz_id'  => $quiz->id,
-                    'question' => $questionData['question'],
+                    'question' => $qData['question'],
                 ]);
 
-                foreach ($questionData['answers'] as $index => $answerData) {
+                foreach ($qData['answers'] as $answerData) {
                     QuizAnswer::create([
                         'quiz_question_id' => $question->id,
                         'answer_text'      => $answerData['answer_text'],
-                        'is_correct'       => ($index == $questionData['correct_answer']),
+                        'is_correct'       => $answerData['is_correct'],
                     ]);
                 }
             }
@@ -165,7 +216,7 @@ class QuizController extends Controller
         }
 
         $questionIndex = (int) $request->query('question', 0);
-        $questions     = $quiz->questions->values(); // 0-based index
+        $questions     = $quiz->questions()->with('answers')->get()->values();
 
         if (!isset($questions[$questionIndex])) {
             return redirect()
@@ -175,27 +226,37 @@ class QuizController extends Controller
 
         $question = $questions[$questionIndex];
 
+        // Load previously selected options from session (for back-navigation)
+        $stored = session()->get('quiz_answers', []);
+        $selectedIds = isset($stored[$question->id])
+            ? (array) $stored[$question->id]
+            : [];
+
         return view('quizzes.take-paginated', [
             'lesson'        => $lesson,
             'quiz'          => $quiz,
             'question'      => $question,
             'questionIndex' => $questionIndex,
+            'questions'     => $questions,
+            'selectedIds'   => $selectedIds,
         ]);
     }
 
     /**
      * Paginated quiz: store answer for one question and move on.
+     * Supports multiple selected options.
      */
     public function storePaginatedAnswer(Request $request, Lesson $lesson)
     {
         $data = $request->validate([
-            'question_id'      => 'required|exists:quiz_questions,id',
-            'selected_option'  => 'required|integer',
-            'current_question' => 'required|integer',
+            'question_id'       => 'required|exists:quiz_questions,id',
+            'selected_options'  => 'required|array|min:1',
+            'selected_options.*'=> 'integer',
+            'current_question'  => 'required|integer',
         ]);
 
         $answers = session()->get('quiz_answers', []);
-        $answers[$data['question_id']] = $data['selected_option'];
+        $answers[$data['question_id']] = $data['selected_options'];
         session()->put('quiz_answers', $answers);
 
         $totalQuestions = $lesson->quiz->questions()->count();
@@ -212,40 +273,55 @@ class QuizController extends Controller
     }
 
     /**
-     * Paginated quiz: final submit.
+     * Paginated quiz: final submit – score based on exact match of
+     * selected answers vs correct answers (supports multi-correct).
      */
     public function submitPaginated(Lesson $lesson)
     {
         $answers   = session()->get('quiz_answers', []);
-        $correct   = 0;
-        $questions = $lesson->quiz->questions;
+        $questions = $lesson->quiz->questions()->with('answers')->get();
+
+        $correctCount = 0;
 
         foreach ($questions as $question) {
-            $selectedAnswerId = $answers[$question->id] ?? null;
+            $selectedIds = collect($answers[$question->id] ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->sort()
+                ->values();
 
-            if ($selectedAnswerId) {
-                $selectedAnswer = $question->answers()->find($selectedAnswerId);
-                if ($selectedAnswer && $selectedAnswer->is_correct) {
-                    $correct++;
-                }
+            $correctIds = $question->answers
+                ->where('is_correct', true)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->sort()
+                ->values();
+
+            if ($selectedIds->isEmpty() || $correctIds->isEmpty()) {
+                continue;
+            }
+
+            // Exact set match: no extra or missing answers
+            if ($selectedIds->diff($correctIds)->isEmpty() &&
+                $correctIds->diff($selectedIds)->isEmpty()) {
+                $correctCount++;
             }
         }
 
-        $total      = $questions->count();
-        $percentage = ($total > 0) ? ($correct / $total) * 100 : 0;
+        $total      = max($questions->count(), 1);
+        $percentage = ($correctCount / $total) * 100;
 
         QuizSubmission::create([
             'user_id'         => Auth::id(),
             'quiz_id'         => $lesson->quiz->id,
             'score'           => $percentage,
-            'correct_answers' => $correct,
+            'correct_answers' => $correctCount,
         ]);
 
         session()->forget('quiz_answers');
 
         return redirect()
             ->route('lessons.quiz.result', ['lesson' => $lesson->id])
-            ->with('score', $correct)
+            ->with('score', $correctCount)
             ->with('percentage', $percentage);
     }
 
@@ -256,7 +332,7 @@ class QuizController extends Controller
     {
         $score      = session('score');
         $percentage = session('percentage');
-        $total      = $lesson->quiz->questions->count();
+        $total      = $lesson->quiz->questions()->count();
 
         return view('quizzes.result', compact('lesson', 'score', 'percentage', 'total'));
     }
