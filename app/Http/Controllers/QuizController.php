@@ -85,9 +85,9 @@ class QuizController extends Controller
     {
         $data = $request->validate([
             'questions'                         => 'required|array|min:1',
-            'questions.*.question'              => 'required|string',
+            'questions.*.question'              => 'required|string|max:2000',
             'questions.*.answers'               => 'required|array|min:1',
-            'questions.*.answers.*.answer_text' => 'nullable|string',
+            'questions.*.answers.*.answer_text' => 'nullable|string|max:1000',
             'questions.*.answers.*.is_correct'  => 'nullable|boolean',
         ]);
 
@@ -145,9 +145,9 @@ class QuizController extends Controller
     {
         $data = $request->validate([
             'questions'                         => 'required|array|min:1',
-            'questions.*.question'              => 'required|string',
+            'questions.*.question'              => 'required|string|max:2000',
             'questions.*.answers'               => 'required|array|min:1',
-            'questions.*.answers.*.answer_text' => 'nullable|string',
+            'questions.*.answers.*.answer_text' => 'nullable|string|max:1000',
             'questions.*.answers.*.is_correct'  => 'nullable|boolean',
         ]);
 
