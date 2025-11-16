@@ -39,31 +39,81 @@
 
             <!-- Lessons -->
             <h2 class="text-xl font-semibold mb-2">Course Content</h2>
+
+            @php
+                $user = auth()->user();
+                $isStudent = $user && $user->role === 'student';
+                $completedLessonIds = $isStudent
+                    ? $user->completedLessons->pluck('id')->toArray()
+                    : [];
+            @endphp
+
             <div class="bg-white shadow rounded divide-y">
                 @forelse ($course->lessons as $lesson)
                     @php
-                        $user = auth()->user();
-                        $isStudent = $user && $user->role === 'student';
+                        // Base flags
+                        $isInstructor = $user && $user->role === 'instructor';
+
+                        // Default: not locked
+                        $isLocked = false;
+                        $lockReason = '';
+
+                        if ($isStudent) {
+                            // If student is not enrolled, lock all lessons (existing behaviour)
+                            if (!$isEnrolled) {
+                                $isLocked = true;
+                                $lockReason = 'Enroll to access this lesson';
+                            } else {
+                                // Student is enrolled: enforce prerequisite chain
+                                if (!$loop->first) {
+                                    $previousLesson = $course->lessons[$loop->index - 1] ?? null;
+                                    $previousCompleted = $previousLesson
+                                        ? in_array($previousLesson->id, $completedLessonIds)
+                                        : false;
+
+                                    if (!$previousCompleted) {
+                                        $isLocked = true;
+                                        $lockReason = 'Complete the previous lesson to unlock this one';
+                                    }
+                                }
+                            }
+                        }
                     @endphp
 
-                    <div class="p-4 flex justify-between items-center 
-                        @if($isStudent && !$isEnrolled) opacity-50 cursor-not-allowed @endif">
+                    <div class="p-4 flex justify-between items-center
+                        {{ $isLocked ? 'opacity-60 cursor-not-allowed' : '' }}">
 
-                        @if($isStudent && !$isEnrolled)
-                            <span class="text-gray-500">{{ $lesson->title }}</span>
-                        @else
-                            <a href="{{ route('lessons.show', $lesson) }}" class="text-indigo-600 font-medium hover:underline">
-                                {{ $lesson->title }}
-                            </a>
-                        @endif
+                        {{-- Left: lesson title + lock info --}}
+                        <div class="flex flex-col">
+                            @if($isLocked)
+                                <span class="text-gray-500">{{ $lesson->title }}</span>
+                                @if($lockReason)
+                                    <span class="text-xs text-gray-400 mt-1">🔒 {{ $lockReason }}</span>
+                                @endif
+                            @else
+                                <a href="{{ route('lessons.show', $lesson) }}"
+                                   class="text-indigo-600 font-medium hover:underline">
+                                    {{ $lesson->title }}
+                                </a>
+                            @endif
+                        </div>
 
-                        @if($user && $user->role === 'instructor')
+                        {{-- Right: instructor actions (never locked for instructors) --}}
+                        @if($isInstructor)
                             <div class="flex gap-3">
-                                <a href="{{ route('lessons.edit', $lesson) }}" class="text-sm text-blue-600 hover:underline">✏️ Edit</a>
-                                <form action="{{ route('lessons.destroy', $lesson) }}" method="POST" onsubmit="return confirm('Delete this lesson?')">
+                                <a href="{{ route('lessons.edit', $lesson) }}"
+                                   class="text-sm text-blue-600 hover:underline">
+                                    ✏️ Edit
+                                </a>
+                                <form action="{{ route('lessons.destroy', $lesson) }}"
+                                      method="POST"
+                                      onsubmit="return confirm('Delete this lesson?')">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="text-sm text-red-600 hover:underline">🗑️</button>
+                                    <button type="submit"
+                                            class="text-sm text-red-600 hover:underline">
+                                        🗑️
+                                    </button>
                                 </form>
                             </div>
                         @endif
@@ -72,6 +122,7 @@
                     <div class="p-4 text-gray-500">No lessons available yet.</div>
                 @endforelse
             </div>
+
 
 
             <!-- Show alert only if logged-in student is not enrolled -->

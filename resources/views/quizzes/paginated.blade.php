@@ -4,7 +4,7 @@
     </x-slot>
 
     <div class="py-6">
-        <div class="max-w-3xl mx-auto bg-white p-6 rounded shadow border">
+        <div class="max-w-7xl mx-auto px-4 bg-white p-6 rounded shadow border">
             <form method="POST" action="{{ route('lessons.quiz.paginated.store', $lesson) }}">
                 @csrf
                 <input type="hidden" name="index" value="{{ $index }}">

@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use App\Models\LessonCompletion;
 use App\Models\QuizSubmission;
-use Illuminate\Support\Facades\DB;
 
 class StudentDashboardController extends Controller
 {
@@ -14,9 +13,17 @@ class StudentDashboardController extends Controller
     {
         $user = Auth::user();
 
-        $enrollments = $user->enrollments()->with('course.lessons.quiz.questions')->get();
-        $completions = LessonCompletion::where('user_id', $user->id)->pluck('lesson_id')->toArray();
+        // Load enrollments + course + lessons + quizzes in one go
+        $enrollments = $user->enrollments()
+            ->with('course.lessons.quiz.questions')
+            ->get();
 
+        // All completed lessons for this user
+        $completions = LessonCompletion::where('user_id', $user->id)
+            ->pluck('lesson_id')
+            ->toArray();
+
+        // Best quiz submissions per quiz (highest score)
         $submissions = QuizSubmission::where('user_id', $user->id)
             ->selectRaw('MAX(score) as score, MAX(correct_answers) as correct_answers, quiz_id')
             ->groupBy('quiz_id')
@@ -27,17 +34,27 @@ class StudentDashboardController extends Controller
 
         foreach ($enrollments as $enrollment) {
             $course = $enrollment->course;
-            $lessons = $course->lessons;
-            $totalLessons = $lessons->count();
-            $completedLessons = collect($lessons)->whereIn('id', $completions)->count();
 
-            // Check quiz pass status
+            // Safety: if an enrollment has no associated course, skip it
+            if (!$course) {
+                continue;
+            }
+
+            // Make sure we always have a collection
+            $lessons       = $course->lessons ?? collect();
+            $totalLessons  = $lessons->count();
+            $completedLessons = $lessons->whereIn('id', $completions)->count();
+
+            // Check quiz pass status for this course
             $allPassed = true;
 
             foreach ($lessons as $lesson) {
                 if ($lesson->quiz) {
-                    $quiz = $lesson->quiz;
-                    $score = $submissions[$quiz->id]->score ?? 0;
+                    $quizId = $lesson->quiz->id;
+
+                    // Might be null if user never attempted this quiz
+                    $submission = $submissions[$quizId] ?? null;
+                    $score      = $submission->score ?? 0;
 
                     if ($score < 80) {
                         $allPassed = false;
@@ -47,13 +64,15 @@ class StudentDashboardController extends Controller
             }
 
             $progress[$course->id] = [
-                'completedLessons' => $completedLessons,
-                'totalLessons' => $totalLessons,
-                'eligibleForCertificate' => $totalLessons > 0 && $completedLessons === $totalLessons && $allPassed,
+                'completedLessons'       => $completedLessons,
+                'totalLessons'           => $totalLessons,
+                'eligibleForCertificate' =>
+                    $totalLessons > 0 &&
+                    $completedLessons === $totalLessons &&
+                    $allPassed,
             ];
         }
 
         return view('student.dashboard', compact('enrollments', 'completions', 'submissions', 'progress'));
     }
-
 }

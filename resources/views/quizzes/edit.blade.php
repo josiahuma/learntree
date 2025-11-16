@@ -1,103 +1,190 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-xl font-bold">✏️ Edit Quiz for: {{ $quiz->lesson->title }}</h2>
+        <div class="flex items-center justify-between">
+            <h2 class="text-xl font-bold">
+                ✏️ Edit Quiz for: <span class="font-semibold">{{ $lesson->title }}</span>
+            </h2>
+
+            <a href="{{ route('lessons.show', $lesson) }}"
+               class="text-sm text-gray-600 hover:text-gray-800 underline">
+                ⬅ Back to Lesson
+            </a>
+        </div>
     </x-slot>
 
     <div class="py-6">
-        <div class="max-w-4xl mx-auto bg-white p-6 rounded shadow border">
-            {{-- ✅ Main Update Quiz Form --}}
-            <form action="{{ route('quizzes.update', $quiz) }}" method="POST" id="quiz-update-form">
+        <div class="max-w-7xl mx-auto px-4 bg-white p-6 rounded shadow border">
+            <div class="mb-4">
+                <p class="text-sm text-gray-700">
+                    Update the questions and answers for this quiz. You can edit existing questions,
+                    remove them, or add new ones.
+                </p>
+            </div>
+
+            @if($errors->any())
+                <div class="mb-4 p-3 rounded bg-red-100 text-red-700 text-sm">
+                    <p class="font-semibold mb-1">Please fix the following issues:</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <form action="{{ route('quizzes.update', $quiz) }}" method="POST" id="quiz-form">
                 @csrf
                 @method('PUT')
 
                 <div id="questions-container">
-                    @foreach ($quiz->questions as $qIndex => $question)
-                        <div class="mb-6 border p-4 rounded shadow-sm question-block bg-gray-50">
-                            <div class="flex justify-between items-start">
-                                <h3 class="text-lg font-semibold mb-2">Question {{ $qIndex + 1 }}</h3>
+                    @php
+                        $initialIndex = 0;
+                    @endphp
 
-                                {{-- ❌ Delete Button --}}
-                                <button type="button"
-                                        class="text-red-600 text-sm ml-4"
-                                        onclick="submitDeleteForm({{ $question->id }})">
-                                    🗑️ Delete
-                                </button>
+                    @foreach($quiz->questions as $qIndex => $question)
+                        <div class="question-block mb-6 border p-4 rounded shadow-sm bg-gray-50 relative">
+                            <div class="flex items-center justify-between mb-2">
+                                <h3 class="text-lg font-semibold">
+                                    Question {{ $qIndex + 1 }}
+                                </h3>
+
+                                @if ($qIndex > 0)
+                                    <button type="button"
+                                            class="text-xs text-red-600 hover:text-red-800"
+                                            onclick="removeQuestion(this)">
+                                        ✖ Remove
+                                    </button>
+                                @endif
                             </div>
 
-                            <label class="block mb-1 font-medium">Question Text:</label>
-                            <input type="text" name="questions[{{ $qIndex }}][question]" class="w-full border rounded px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                   value="{{ $question->question }}" required>
+                            <label class="block mb-1 text-sm font-medium">Question text</label>
+                            <input
+                                type="text"
+                                name="questions[{{ $qIndex }}][question]"
+                                class="w-full border rounded px-3 py-2 mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                value="{{ old("questions.$qIndex.question", $question->question) }}"
+                                required
+                            >
 
-                            <label class="block mb-1 font-medium">Answers:</label>
-                            @foreach ($question->answers as $aIndex => $answer)
+                            <label class="block mb-1 text-sm font-medium">Answer options</label>
+                            <p class="text-xs text-gray-500 mb-2">
+                                Select the radio button next to the correct answer.
+                            </p>
+
+                            @php
+                                $answers = $question->answers->values();
+                            @endphp
+
+                            @foreach($answers as $aIndex => $answer)
                                 <div class="flex items-center gap-2 mb-2">
-                                    <input type="radio" name="questions[{{ $qIndex }}][correct_answer]" value="{{ $aIndex }}" @if($answer->is_correct) checked @endif required>
-                                    <input type="text" name="questions[{{ $qIndex }}][answers][{{ $aIndex }}][answer_text]"
-                                           class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                           value="{{ $answer->answer_text }}" required>
+                                    <input
+                                        type="radio"
+                                        name="questions[{{ $qIndex }}][correct_answer]"
+                                        value="{{ $aIndex }}"
+                                        class="shrink-0"
+                                        {{ $answer->is_correct ? 'checked' : '' }}
+                                        required
+                                    >
+                                    <input
+                                        type="text"
+                                        name="questions[{{ $qIndex }}][answers][{{ $aIndex }}][answer_text]"
+                                        class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        value="{{ old("questions.$qIndex.answers.$aIndex.answer_text", $answer->answer_text) }}"
+                                        placeholder="Option {{ chr(65 + $aIndex) }}"
+                                        required
+                                    >
                                 </div>
                             @endforeach
-
-                            <input type="hidden" name="questions[{{ $qIndex }}][id]" value="{{ $question->id }}">
                         </div>
+
+                        @php
+                            $initialIndex = $qIndex + 1;
+                        @endphp
                     @endforeach
                 </div>
 
-                {{-- ➕ Add New Question --}}
-                <button type="button" onclick="addQuestion()" class="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-2 rounded mb-6">
-                    ➕ Add New Question
-                </button>
+                <div class="flex items-center justify-between mt-4">
+                    <button
+                        type="button"
+                        onclick="addQuestion()"
+                        class="inline-flex items-center bg-yellow-400 hover:bg-yellow-500 text-black text-sm font-semibold px-4 py-2 rounded shadow-sm">
+                        ➕ Add Another Question
+                    </button>
 
-                {{-- ✅ Submit --}}
-                <div>
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded">
-                        ✅ Update Quiz
+                    <button
+                        type="submit"
+                        class="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-6 py-2 rounded shadow">
+                        💾 Save Changes
                     </button>
                 </div>
             </form>
-
-            {{-- Hidden Delete Forms --}}
-            @foreach ($quiz->questions as $question)
-                <form id="delete-form-{{ $question->id }}" action="{{ route('questions.destroy', $question) }}" method="POST" style="display: none;">
-                    @csrf
-                    @method('DELETE')
-                </form>
-            @endforeach
         </div>
     </div>
 
     <script>
-        let questionCount = {{ $quiz->questions->count() }};
+        // Start indexing after the last existing question
+        let questionIndex = {{ $initialIndex }};
 
         function addQuestion() {
             const container = document.getElementById('questions-container');
 
-            const html = `
-                <div class="mb-6 border p-4 rounded shadow-sm question-block bg-gray-50">
-                    <h3 class="text-lg font-semibold mb-2">New Question</h3>
+            const block = document.createElement('div');
+            block.className = 'question-block mb-6 border p-4 rounded shadow-sm bg-gray-50 relative';
 
-                    <label class="block mb-1 font-medium">Question Text:</label>
-                    <input type="text" name="questions[${questionCount}][question]" class="w-full border rounded px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
-
-                    <label class="block mb-1 font-medium">Answers:</label>
-                    ${[0, 1, 2, 3].map(i => `
-                        <div class="flex items-center gap-2 mb-2">
-                            <input type="radio" name="questions[${questionCount}][correct_answer]" value="${i}" required>
-                            <input type="text" name="questions[${questionCount}][answers][${i}][answer_text]"
-                                   class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                   placeholder="Option ${String.fromCharCode(65 + i)}" required>
-                        </div>
-                    `).join('')}
+            block.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-lg font-semibold">
+                        Question ${questionIndex + 1}
+                    </h3>
+                    <button type="button"
+                        class="text-xs text-red-600 hover:text-red-800"
+                        onclick="removeQuestion(this)">
+                        ✖ Remove
+                    </button>
                 </div>
+
+                <label class="block mb-1 text-sm font-medium">Question text</label>
+                <input
+                    type="text"
+                    name="questions[${questionIndex}][question]"
+                    class="w-full border rounded px-3 py-2 mb-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Type the question here..."
+                    required
+                >
+
+                <label class="block mb-1 text-sm font-medium">Answer options</label>
+                <p class="text-xs text-gray-500 mb-2">
+                    Select the radio button next to the correct answer.
+                </p>
+
+                ${['A', 'B', 'C', 'D'].map((label, i) => `
+                    <div class="flex items-center gap-2 mb-2">
+                        <input
+                            type="radio"
+                            name="questions[${questionIndex}][correct_answer]"
+                            value="${i}"
+                            class="shrink-0"
+                            required
+                        >
+                        <input
+                            type="text"
+                            name="questions[${questionIndex}][answers][${i}][answer_text]"
+                            class="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Option ${label}"
+                            required
+                        >
+                    </div>
+                `).join('')}
             `;
 
-            container.insertAdjacentHTML('beforeend', html);
-            questionCount++;
+            container.appendChild(block);
+            questionIndex++;
         }
 
-        function submitDeleteForm(questionId) {
-            if (confirm('Are you sure you want to delete this question?')) {
-                document.getElementById(`delete-form-${questionId}`).submit();
+        function removeQuestion(button) {
+            const block = button.closest('.question-block');
+            if (block) {
+                block.remove();
             }
         }
     </script>

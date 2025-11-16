@@ -14,19 +14,20 @@
         <!-- SimpleMDE Markdown Editor -->
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
         <script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script>
+
+        <!-- Alpine -->
         <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
-
-        
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
-
     </head>
+
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-gray-100">
+            {{-- Top navigation (role-aware) --}}
             @include('layouts.navigation')
 
-            <!-- Page Heading -->
+            {{-- Page Heading --}}
             @isset($header)
                 <header class="bg-white shadow">
                     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -35,26 +36,9 @@
                 </header>
             @endisset
 
-            <!-- Page Content -->
+            {{-- Page Content --}}
             <main>
-                @if(auth()->check() && auth()->user()->role === 'admin')
-                    <div class="flex">
-                        <div class="w-64 h-screen bg-gray-100 p-4">
-                            <h2 class="text-lg font-bold mb-4">Admin Panel</h2>
-                            <ul class="space-y-2">
-                                <li><a href="{{ route('admin.dashboard') }}">Dashboard</a></li>
-                                <li><a href="{{ route('admin.home-settings.edit') }}">Home Settings</a></li>
-                                <li><a href="{{ route('courses.index') }}">Approve Courses</a></li>
-                                <li><a href="#">Manage Users</a></li>
-                            </ul>
-                        </div>
-                        <div class="flex-1 p-6">
-                            {{ $slot }}
-                        </div>
-                    </div>
-                    @else
-                        {{ $slot }}
-                    @endif
+                {{ $slot }}
             </main>
         </div>
     </body>

@@ -13,10 +13,23 @@
             <div class="hidden sm:flex items-center space-x-4 ml-auto">
                 @auth
                     @if (auth()->user()->role === 'admin')
-                        <x-nav-link href="{{ url('/admin/dashboard') }}" :active="request()->is('admin/dashboard')">
+                        <x-nav-link href="{{ route('admin.dashboard') }}" :active="request()->routeIs('admin.dashboard')">
                             Admin Dashboard
                         </x-nav-link>
+
+                        <x-nav-link href="{{ route('admin.home-settings.edit') }}" :active="request()->routeIs('admin.home-settings.*')">
+                            Home Settings
+                        </x-nav-link>
+
+                        <x-nav-link href="{{ route('admin.courses.index') }}" :active="request()->routeIs('admin.courses.index')">
+                            Approve Courses
+                        </x-nav-link>
+
+                        <x-nav-link href="{{ route('admin.users.index') }}" :active="request()->routeIs('admin.users.*')">
+                            Manage Users
+                        </x-nav-link>
                     @endif
+
 
                     @if (auth()->user()->role === 'instructor')
                         <x-nav-link href="{{ route('instructor.dashboard') }}" :active="request()->routeIs('instructor.dashboard')">
@@ -100,10 +113,23 @@
         <div class="pt-2 pb-3 space-y-1 px-4">
             @auth
                 @if (auth()->user()->role === 'admin')
-                    <x-responsive-nav-link href="{{ url('/admin/dashboard') }}" :active="request()->is('admin/dashboard')">
+                    <x-responsive-nav-link href="{{ route('admin.dashboard') }}" :active="request()->routeIs('admin.dashboard')">
                         Admin Dashboard
                     </x-responsive-nav-link>
+
+                    <x-responsive-nav-link href="{{ route('admin.home-settings.edit') }}" :active="request()->routeIs('admin.home-settings.*')">
+                        Home Settings
+                    </x-responsive-nav-link>
+
+                    <x-responsive-nav-link href="{{ route('admin.courses.index') }}" :active="request()->routeIs('admin.courses.index')">
+                        Approve Courses
+                    </x-responsive-nav-link>
+
+                    <x-responsive-nav-link href="{{ route('admin.users.index') }}" :active="request()->routeIs('admin.users.*')">
+                        Manage Users
+                    </x-responsive-nav-link>
                 @endif
+
 
                 @if (auth()->user()->role === 'instructor')
                     <x-responsive-nav-link href="{{ route('instructor.dashboard') }}" :active="request()->routeIs('instructor.dashboard')">

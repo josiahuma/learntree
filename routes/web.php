@@ -3,6 +3,8 @@
 use App\Http\Controllers\Instructor\InstructorController;
 use App\Http\Controllers\Student\StudentDashboardController;
 use App\Http\Controllers\Admin\HomeSettingsController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\CourseApprovalController;
 use App\Http\Controllers\QuizQuestionController;
 use App\Http\Controllers\CourseReviewController;
 use App\Http\Controllers\LessonCompletionController;
@@ -12,6 +14,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\LessonController;
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\Auth\GoogleController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [CourseController::class, 'landing'])->name('home');
@@ -32,8 +35,19 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
             return view('admin.dashboard');
         })->name('dashboard');
 
+    // Home settings
     Route::get('/home-settings/edit', [HomeSettingsController::class, 'edit'])->name('home-settings.edit');
     Route::put('/home-settings/update', [HomeSettingsController::class, 'update'])->name('home-settings.update');
+
+    // User management
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::patch('/users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
+
+    // NEW: Approve Courses page
+    Route::get('/courses', [CourseApprovalController::class, 'index'])
+        ->name('courses.index');
+    Route::put('/courses/{course}', [CourseApprovalController::class, 'update'])
+        ->name('courses.update');
 });
 
 
@@ -66,14 +80,44 @@ Route::middleware('auth')->group(function () {
     Route::delete('/courses/{course}/reviews/{review}', [CourseReviewController::class, 'destroy'])->name('courses.reviews.destroy');
 
 
-    // Quiz Management (Create/Edit/Delete)
-    Route::get('/lessons/{lesson}/quiz/create', [QuizController::class, 'create'])->name('quizzes.create');
-    Route::post('/lessons/{lesson}/quiz/create', [QuizController::class, 'store'])->name('quizzes.store');
-    Route::get('/quizzes/{quiz}/edit', [QuizController::class, 'edit'])->name('quizzes.edit');
-    Route::put('/quizzes/{quiz}', [QuizController::class, 'update'])->name('quizzes.update');
-    Route::delete('/quizzes/{quiz}', [QuizController::class, 'destroy'])->name('quizzes.destroy');
-    Route::get('/quizzes/{quiz}', [QuizController::class, 'view'])->name('quizzes.view');
-    Route::delete('/questions/{question}', [QuizQuestionController::class, 'destroy'])->name('questions.destroy');
+    // Quiz Management (Create / Edit / Delete)
+    Route::get('/lessons/{lesson}/quiz/create', [QuizController::class, 'create'])
+        ->name('quizzes.create');
+
+    Route::post('/lessons/{lesson}/quiz/create', [QuizController::class, 'store'])
+        ->name('quizzes.store');
+
+    // If/when you implement editing a quiz:
+    Route::get('/quizzes/{quiz}/edit', [QuizController::class, 'edit'])
+        ->name('quizzes.edit');
+    Route::put('/quizzes/{quiz}', [QuizController::class, 'update'])
+        ->name('quizzes.update');
+
+    // Optional detailed view of a quiz
+    Route::get('/quizzes/{quiz}', [QuizController::class, 'view'])
+        ->name('quizzes.view');
+
+    //Delete entire quiz
+    Route::delete('/quizzes/{quiz}', [QuizController::class, 'destroy'])
+        ->name('quizzes.destroy');
+
+    // Delete an individual question (still handled by QuizQuestionController)
+    Route::delete('/questions/{question}', [QuizQuestionController::class, 'destroy'])
+        ->name('questions.destroy');
+
+    // Paginated Quiz Flow
+    Route::get('/lessons/{lesson}/quiz/take', [QuizController::class, 'takePaginated'])
+        ->name('lessons.quiz.paginated');
+
+    Route::post('/lessons/{lesson}/quiz/take', [QuizController::class, 'storePaginatedAnswer'])
+        ->name('lessons.quiz.paginated.store');
+
+    Route::get('/lessons/{lesson}/quiz/submit', [QuizController::class, 'submitPaginated'])
+        ->name('lessons.quiz.paginated.submit');
+
+    Route::get('/lessons/{lesson}/quiz/result', [QuizController::class, 'result'])
+        ->name('lessons.quiz.result');
+
 
     // ✅ Paginated Quiz Flow (only use these, remove old quiz routes)
     Route::get('/lessons/{lesson}/quiz/take', [QuizController::class, 'takePaginated'])->name('lessons.quiz.paginated');
@@ -97,6 +141,14 @@ Route::middleware('auth')->group(function () {
 Route::get('/courses', [CourseController::class, 'index'])->name('courses.index');
 Route::get('/courses/{course}', [CourseController::class, 'show'])->name('courses.show');
 Route::post('/courses/{course}/reviews', [CourseReviewController::class, 'store'])->name('courses.reviews.store');
+
+Route::middleware('guest')->group(function () {
+    Route::get('/auth/google/redirect', [GoogleController::class, 'redirect'])
+        ->name('auth.google.redirect');
+
+    Route::get('/auth/google/callback', [GoogleController::class, 'callback'])
+        ->name('auth.google.callback');
+});
 
 
 require __DIR__ . '/auth.php';

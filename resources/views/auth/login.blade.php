@@ -2,6 +2,18 @@
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 
+    {{-- Google button --}}
+    <div class="mb-4">
+        <a href="{{ route('auth.google.redirect') }}"
+        class="w-full inline-flex items-center justify-center gap-2 border border-gray-300 bg-white px-4 py-2 rounded shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <svg class="h-4 w-4" viewBox="0 0 533.5 544.3" aria-hidden="true">
+                {{-- tiny Google "G" svg, optional, or remove svg entirely --}}
+                <path fill="#4285F4" d="M533.5 278.4c0-17.4-1.5-34.1-4.3-50.2H272v95.0h146.9..." />
+            </svg>
+            <span>Continue with Google</span>
+        </a>
+    </div>
+
     <form method="POST" action="{{ route('login') }}">
         @csrf
 

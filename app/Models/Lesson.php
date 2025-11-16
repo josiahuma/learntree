@@ -23,5 +23,6 @@ class Lesson extends Model
         'title',
         'content',
         'video_url',
+        'order',
     ];
 }

@@ -16,6 +16,7 @@ class Course extends Model
         'featured_image',
         'difficulty',
         'duration',
+        'is_approved',
     ];
 
 

@@ -5,34 +5,36 @@ namespace App\Http\Controllers;
 use App\Models\Course;
 use App\Models\SiteSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class CourseController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Course::with('instructor');
+        $query = Course::with(['instructor', 'reviews'])
+            ->where('is_approved', 1); // ✅ Only approved courses
 
-        // Search
         if ($request->filled('search')) {
             $query->where('title', 'like', '%' . $request->search . '%');
         }
 
-        // Filter by difficulty
         if ($request->filled('difficulty')) {
             $query->where('difficulty', $request->difficulty);
         }
 
-        // Filter by price
-        if ($request->price === 'free') {
-            $query->where('price', 0);
-        } elseif ($request->price === 'paid') {
-            $query->where('price', '>', 0);
+        if ($request->filled('price')) {
+            if ($request->price === 'free') {
+                $query->where('price', 0);
+            } elseif ($request->price === 'paid') {
+                $query->where('price', '>', 0);
+            }
         }
 
-        $courses = $query->latest()->get();
+        $courses = $query->paginate(12);
 
         return view('courses.index', compact('courses'));
     }
+
 
 
     public function create()
@@ -93,17 +95,37 @@ class CourseController extends Controller
 
     public function update(Request $request, Course $course)
     {
-        $course->update($request->validate([
-            'title' => 'required',
-            'description' => 'nullable',
-            'price' => 'required|numeric',
-            'sale_price' => 'nullable|numeric',
-            'difficulty' => 'required|string|in:beginner,intermediate,advanced',
-            'duration' => 'nullable|string|max:100',
-            'featured_image' => 'nullable|image|max:5120', // 5MB max
-        ]));
+        // 1. Validate
+        $data = $request->validate([
+            'title'          => 'required|string',
+            'description'    => 'nullable|string',
+            'price'          => 'required|numeric',
+            'sale_price'     => 'nullable|numeric',
+            'difficulty'     => 'required|string|in:beginner,intermediate,advanced',
+            'duration'       => 'nullable|string|max:100',
+            'featured_image' => 'nullable|image|max:5120', // 5MB
+        ]);
 
-        return redirect()->route('courses.show', $course)->with('success', 'Course updated.');
+        // 2. Handle image upload (if present)
+        if ($request->hasFile('featured_image')) {
+            // optional: delete old image
+            if ($course->featured_image) {
+                Storage::disk('public')->delete($course->featured_image);
+            }
+
+            $path = $request->file('featured_image')->store('courses', 'public');
+            $data['featured_image'] = $path;
+        } else {
+            // Don't overwrite existing image when no new file is uploaded
+            unset($data['featured_image']);
+        }
+
+        // 3. Update course
+        $course->update($data);
+
+        return redirect()
+            ->route('courses.show', $course)
+            ->with('success', 'Course updated.');
     }
 
     public function destroy(Course $course)
@@ -125,22 +147,34 @@ class CourseController extends Controller
 
     public function landing()
     {
-        $settings = SiteSetting::first();
+        // Always have a settings row
+        $settings = SiteSetting::firstOrCreate([], [
+            'hero_background_color' => '#4f46e5',
+            'featured_course_ids'   => [],
+        ]);
 
-        if ($settings && $settings->featured_course_ids) {
-            // Decode if featured_course_ids is stored as JSON
-            $ids = is_array($settings->featured_course_ids)
-                ? $settings->featured_course_ids
-                : json_decode($settings->featured_course_ids, true);
+        $featuredIds = $settings->featured_course_ids ?? [];
 
-            $courses = Course::whereIn('id', $ids)->get();
+        // Base query with relations
+        $query = Course::with(['instructor', 'reviews'])
+                    ->where('is_approved', 1); // 👈 NEW filter
+
+        if (!empty($featuredIds)) {
+            // Only featured courses, keep same order as in settings
+            $idList = implode(',', $featuredIds);
+
+            $query->whereIn('id', $featuredIds)
+                ->orderByRaw("FIELD(id, {$idList})");
         } else {
-            // Fallback: show recent 6 courses
-            $courses = Course::latest()->take(6)->get();
+            // Fallback: latest 8 approved courses
+            $query->latest()->take(8);
         }
 
-        return view('home', compact('courses', 'settings'));
+        $courses = $query->get();
+
+        return view('home', compact('settings', 'courses'));
     }
+
 
 
     public function search(Request $request)
